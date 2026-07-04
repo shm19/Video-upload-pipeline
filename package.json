@@ -5,14 +5,22 @@
   "type": "module",
   "scripts": {
     "producer": "tsx src/producer.ts",
-    "consumer": "tsx src/consumer.ts"
+    "consumer": "tsx src/consumer.ts",
+    "api": "tsx src/api.ts",
+    "worker": "tsx src/transcode-worker.ts"
   },
   "dependencies": {
-    "amqplib": "^0.10.4"
+    "amqplib": "^0.10.4",
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.13.0"
   },
   "devDependencies": {
     "@types/amqplib": "^0.10.5",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^1.4.12",
     "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.10",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   }

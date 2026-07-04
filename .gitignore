@@ -27,3 +27,6 @@ Thumbs.db
 
 # Docker volumes (local data, if ever mounted as bind dirs)
 pgdata/
+
+*.mp4
+storage

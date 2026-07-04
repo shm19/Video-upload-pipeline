@@ -16,3 +16,4 @@ export async function connect(): Promise<{
 
 // Shared names so producer and consumer agree on the topology.
 export const EXCHANGE = "video.events";
+export const DLX = "video.dlx";
