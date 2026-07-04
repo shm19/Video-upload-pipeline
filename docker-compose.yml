@@ -1,0 +1,35 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: vidpipe-rabbit
+    ports:
+      - "5672:5672"
+      - "15672:15672" # Management UI (open in browser: http://localhost:15672)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:16
+    container_name: vidpipe-pg
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: vidpipe
+      POSTGRES_PASSWORD: vidpipe
+      POSTGRES_DB: vidpipe
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vidpipe"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
