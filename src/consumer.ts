@@ -24,12 +24,22 @@ async function main() {
   const { channel } = await connect();
 
   // TODO: assert the exchange (same name/type as producer)
+  await channel.assertExchange(EXCHANGE, "fanout", { durable: true });
 
   // TODO: assert a queue
+  // lets create the transcode queue
+  await channel.assertQueue("transcode", { durable: true });
 
   // TODO: bind the queue to the exchange
+  await channel.bindQueue("transcode", EXCHANGE, "");
 
   // TODO: channel.consume(...) and log msg.content.toString()
+  await channel.consume("transcode", (msg) => {
+    if (msg) {
+      console.log(msg.content.toString());
+      channel.ack(msg);
+    }
+  });
 
   console.log("TODO: consume messages. Waiting...");
 }
