@@ -137,19 +137,6 @@ them; Grafana graphs them. The metrics that map to decisions:
 > the plumbing and the vocabulary (what to watch and why), not a production observability
 > setup. That's a project of its own.
 
-## Known gaps / next steps
-
-- **Dual-write gap (outbox pattern):** the API publishes *after* the DB commit, with no shared
-  transaction — so a crash between the two can leave a row with no message (or vice versa).
-  The fix is the outbox pattern (write an `outbox` row in the same txn; a poller publishes it).
-- **Containerize the app (Option A):** infra runs in Docker while the Node API/workers run on
-  the host (`npm start`). Dockerizing the app — a Node image with ffmpeg + whisper, added as
-  compose services — is a good later exercise for practicing container builds (tradeoff: a
-  large whisper image and slower iteration, which is why it's deferred).
-- **Kafka version:** a separate project to explore partitions, consumer groups, and replay —
-  the things RabbitMQ doesn't give you.
-- Cleanup: `src/consumer.ts` and `src/producer.ts` are leftover Phase-1 scratch files.
-
 ## Concepts demonstrated
 
 Sync vs async · message broker (RabbitMQ) · exchange / queue / binding / routing key ·
