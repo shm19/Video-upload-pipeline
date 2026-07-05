@@ -17,3 +17,20 @@ export async function connect(): Promise<{
 // Shared names so producer and consumer agree on the topology.
 export const EXCHANGE = "video.events";
 export const DLX = "video.dlx";
+export const DEAD_QUEUE = "video.dead";
+
+// Declare the whole topology a worker needs: the fanout exchange, the DLX +
+// dead-letter queue, and this worker's own work queue (bound to the fanout,
+// dead-lettering to the DLX). assert is idempotent, so every worker can call it.
+export async function assertVideoTopology(channel: Channel, queue: string): Promise<void> {
+  await channel.assertExchange(DLX, "fanout", { durable: true });
+  await channel.assertQueue(DEAD_QUEUE, { durable: true });
+  await channel.bindQueue(DEAD_QUEUE, DLX, "");
+
+  await channel.assertExchange(EXCHANGE, "fanout", { durable: true });
+  await channel.assertQueue(queue, {
+    durable: true,
+    arguments: { "x-dead-letter-exchange": DLX },
+  });
+  await channel.bindQueue(queue, EXCHANGE, "");
+}

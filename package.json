@@ -7,7 +7,9 @@
     "producer": "tsx src/producer.ts",
     "consumer": "tsx src/consumer.ts",
     "api": "tsx src/api.ts",
-    "worker": "tsx src/transcode-worker.ts"
+    "worker": "tsx src/transcode-worker.ts",
+    "worker:thumbnail": "tsx src/thumbnail-worker.ts",
+    "worker:caption": "tsx src/caption-worker.ts"
   },
   "dependencies": {
     "amqplib": "^0.10.4",

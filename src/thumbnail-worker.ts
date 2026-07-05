@@ -2,8 +2,8 @@ import { connect, assertVideoTopology } from "./rabbit.js";
 import { pool, recomputeVideoStatus } from "./db.js";
 import { ffmpeg } from "./utils.js";
 
-const QUEUE = "transcode";
-const JOB_TYPE = "transcode";
+const QUEUE = "thumbnail";
+const JOB_TYPE = "thumbnail";
 const MAX_ATTEMPTS = 3;
 const log = (...a: unknown[]) => console.log(`[${JOB_TYPE}]`, ...a);
 
@@ -39,8 +39,8 @@ async function main() {
     log(`${videoId} received — attempt ${attempts}, working...`);
 
     try {
-      const out = `storage/${videoId}-480.mp4`;
-      await ffmpeg(["-y", "-i", originalPath, "-vf", "scale=-2:480", out]);
+      const out = `storage/${videoId}.jpg`;
+      await ffmpeg(["-y", "-i", originalPath, "-ss", "00:00:01", "-vframes", "1", out]);
 
       await pool.query(
         `UPDATE jobs SET status = 'done', output_path = $3, updated_at = now()
