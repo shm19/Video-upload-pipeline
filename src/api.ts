@@ -13,6 +13,8 @@ async function main() {
   await channel.assertExchange(EXCHANGE, "fanout", { durable: true });
 
   const app = express();
+  app.use(express.static("public"));
+  app.use("/media", express.static("storage"));
 
   app.post("/videos", upload.single("video"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "no file" });
@@ -20,7 +22,6 @@ async function main() {
     const videoId = randomUUID();
     const originalPath = req.file.path;
 
-    // Insert the video AND its three pending jobs in ONE transaction.
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -50,19 +51,30 @@ async function main() {
     res.status(202).json({ videoId, status: "uploaded" });
   });
 
-  app.listen(3000, () => console.log("upload API on http://localhost:3000"));
-
-  // debug: print video + job status every 5s
-  setInterval(async () => {
+  // Status feed the UI polls: recent videos + their jobs as nested JSON.
+  app.get("/videos", async (_req, res) => {
     const { rows } = await pool.query(
-      `SELECT v.id, v.status AS video, j.job_type, j.status AS job, j.attempts
+      `SELECT v.id, v.status, v.created_at,
+              json_agg(
+                json_build_object(
+                  'job_type', j.job_type,
+                  'status', j.status,
+                  'attempts', j.attempts,
+                  'output_path', j.output_path
+                ) ORDER BY j.job_type
+              ) AS jobs
        FROM videos v
        LEFT JOIN jobs j ON j.video_id = v.id
-       ORDER BY v.created_at DESC, j.job_type`,
+       GROUP BY v.id
+       ORDER BY v.created_at DESC
+       LIMIT 20`,
     );
-    console.log(`\n=== status @ ${new Date().toLocaleTimeString()} ===`);
-    console.table(rows);
-  }, 5000);
+    res.json(rows);
+  });
+
+  app.listen(3000, () =>
+    console.log("VidPipe UI + API on http://localhost:3000"),
+  );
 }
 
 main().catch((err) => {

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VidPipe</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 820px; margin: 40px auto; padding: 0 16px; color: #1a1a1a; }
+      h1 { margin-bottom: 4px; }
+      .sub { color: #666; margin-top: 0; }
+      .upload { display: flex; gap: 8px; align-items: center; margin: 24px 0; }
+      button { padding: 8px 16px; border: 0; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; }
+      button:disabled { opacity: .5; cursor: default; }
+      .video { border: 1px solid #e5e5e5; border-radius: 8px; padding: 14px; margin: 12px 0; display: flex; gap: 14px; }
+      .video img { width: 120px; height: 68px; object-fit: cover; border-radius: 4px; background: #f0f0f0; }
+      .meta { flex: 1; }
+      .id { font-family: monospace; font-size: 12px; color: #888; }
+      .jobs { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+      .badge { font-size: 12px; padding: 3px 8px; border-radius: 999px; text-transform: capitalize; }
+      .pending    { background: #eee; color: #666; }
+      .processing { background: #fef3c7; color: #92400e; }
+      .done       { background: #dcfce7; color: #166534; }
+      .failed     { background: #fee2e2; color: #991b1b; }
+      .overall { font-weight: 600; }
+      .downloads { margin-top: 8px; font-size: 13px; }
+      .downloads a { color: #2563eb; text-decoration: none; margin-right: 14px; }
+      .downloads a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <h1>VidPipe</h1>
+    <p class="sub">Upload a video → transcode, thumbnail, and caption jobs run in parallel.</p>
+
+    <div class="upload">
+      <input type="file" id="file" accept="video/*" />
+      <button id="btn">Upload</button>
+      <span id="msg"></span>
+    </div>
+
+    <div id="list"></div>
+
+    <script>
+      const btn = document.getElementById("btn");
+      const fileInput = document.getElementById("file");
+      const msg = document.getElementById("msg");
+
+      btn.onclick = async () => {
+        const file = fileInput.files[0];
+        if (!file) return (msg.textContent = "pick a file first");
+        btn.disabled = true;
+        msg.textContent = "uploading…";
+        const body = new FormData();
+        body.append("video", file);
+        try {
+          const r = await fetch("/videos", { method: "POST", body });
+          const j = await r.json();
+          msg.textContent = r.ok ? `queued ${j.videoId.slice(0, 8)}` : `error: ${j.error}`;
+        } catch (e) {
+          msg.textContent = "upload failed";
+        } finally {
+          btn.disabled = false;
+          fileInput.value = "";
+          refresh();
+        }
+      };
+
+      const media = (p) => (p ? "/media/" + p.replace(/^storage\//, "") : null);
+
+      function jobBadge(j) {
+        return `<span class="badge ${j.status}" title="attempts: ${j.attempts}">${j.job_type}: ${j.status}</span>`;
+      }
+
+      // download links for finished outputs: [label, suggested filename]
+      const OUT = {
+        transcode: ["⬇ 480p video", "480p.mp4"],
+        thumbnail: ["⬇ thumbnail", "thumbnail.jpg"],
+        caption: ["⬇ captions", "captions.vtt"],
+      };
+      function downloads(v) {
+        const links = v.jobs
+          .filter((j) => j.status === "done" && j.output_path)
+          .map((j) => {
+            const [label, name] = OUT[j.job_type] || [j.job_type, "file"];
+            return `<a href="${media(j.output_path)}" download="${name}">${label}</a>`;
+          });
+        return links.length ? `<div class="downloads">${links.join("")}</div>` : "";
+      }
+
+      async function refresh() {
+        const videos = await fetch("/videos").then((r) => r.json());
+        document.getElementById("list").innerHTML = videos
+          .map((v) => {
+            const thumb = media((v.jobs.find((j) => j.job_type === "thumbnail") || {}).output_path);
+            return `
+              <div class="video">
+                <img src="${thumb || ""}" alt="" onerror="this.style.visibility='hidden'"/>
+                <div class="meta">
+                  <div class="overall">Video — <span class="badge ${v.status}">${v.status}</span></div>
+                  <div class="id">${v.id}</div>
+                  <div class="jobs">${v.jobs.filter((j) => j.job_type).map(jobBadge).join("")}</div>
+                  ${downloads(v)}
+                </div>
+              </div>`;
+          })
+          .join("");
+      }
+
+      refresh();
+      setInterval(refresh, 2000); // live status
+    </script>
+  </body>
+</html>
