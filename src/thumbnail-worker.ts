@@ -40,7 +40,16 @@ async function main() {
 
     try {
       const out = `storage/${videoId}.jpg`;
-      await ffmpeg(["-y", "-i", originalPath, "-ss", "00:00:01", "-vframes", "1", out]);
+      await ffmpeg([
+        "-y",
+        "-i",
+        originalPath,
+        "-ss",
+        "00:00:01",
+        "-vframes",
+        "1",
+        out,
+      ]);
 
       await pool.query(
         `UPDATE jobs SET status = 'done', output_path = $3, updated_at = now()

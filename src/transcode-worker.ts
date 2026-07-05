@@ -26,13 +26,23 @@ async function main() {
 
     const claim = await pool.query(
       `UPDATE jobs SET status = 'processing', attempts = attempts + 1, updated_at = now()
-       WHERE video_id = $1 AND job_type = $2
+       WHERE video_id = $1 AND job_type = $2 AND status <> 'done'
        RETURNING attempts`,
       [videoId, JOB_TYPE],
     );
     if (claim.rows.length === 0) {
-      log(`no job row for ${videoId} → DLX`);
-      channel.nack(msg, false, false);
+      // check if we already check this if not go to DLX
+      const { rows } = await pool.query(
+        "SELECT status FROM jobs WHERE video_id=$1 AND job_type=$2",
+        [videoId, JOB_TYPE],
+      );
+      if (rows[0]?.status === "done") {
+        log(`${videoId} already done → skip (idempotent)`);
+        channel.ack(msg); // duplicate — work already happened
+      } else {
+        log(`no job row for ${videoId} → DLX`);
+        channel.nack(msg, false, false); // real orphan
+      }
       return;
     }
     const attempts: number = claim.rows[0].attempts;
@@ -49,6 +59,7 @@ async function main() {
       );
       await recomputeVideoStatus(videoId);
       log(`${videoId} DONE → ${out}`);
+      if (process.env.CRASH_AFTER_WORK) process.exit(1);
       channel.ack(msg);
     } catch (e) {
       log(`${videoId} error on attempt ${attempts}:`, e);

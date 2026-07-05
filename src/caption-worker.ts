@@ -37,14 +37,23 @@ async function main() {
 
     const claims = await pool.query(
       `UPDATE jobs SET attempts = attempts + 1, status = 'processing', updated_at = now()
-      WHERE video_id = $1 AND job_type = $2
+      WHERE video_id = $1 AND job_type = $2 AND status <> 'done'
       RETURNING attempts
       `,
       [videoId, JOB_TYPE],
     );
     if (claims.rows.length === 0) {
-      console.error(`[caption] no rows from claim for ${videoId} → DLX`);
-      channel.nack(msg, false, false);
+      const { rows } = await pool.query(
+        "SELECT status FROM jobs WHERE video_id=$1 AND job_type=$2",
+        [videoId, JOB_TYPE],
+      );
+      if (rows[0]?.status === "done") {
+        log(`${videoId} already done → skip (idempotent)`);
+        channel.ack(msg); // duplicate — work already happened
+      } else {
+        log(`no job row for ${videoId} → DLX`);
+        channel.nack(msg, false, false); // real orphan
+      }
       return;
     }
     const attemps = claims.rows[0].attempts;
