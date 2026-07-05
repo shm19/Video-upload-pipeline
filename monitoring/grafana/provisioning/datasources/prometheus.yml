@@ -1,0 +1,9 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # "prometheus" is the compose service name on the internal network.
+    url: http://prometheus:9090
+    isDefault: true
