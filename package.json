@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "producer": "tsx src/producer.ts",
-    "consumer": "tsx src/consumer.ts",
     "api": "tsx src/api.ts",
     "worker": "tsx src/transcode-worker.ts",
     "worker:thumbnail": "tsx src/thumbnail-worker.ts",
-    "worker:caption": "tsx src/caption-worker.ts"
+    "worker:caption": "tsx src/caption-worker.ts",
+    "dev": "concurrently -n api,transcode,thumbnail,caption -c blue,green,magenta,yellow \"npm:api\" \"npm:worker\" \"npm:worker:thumbnail\" \"npm:worker:caption\"",
+    "start": "docker compose up -d --wait && npm run dev"
   },
   "dependencies": {
     "amqplib": "^0.10.4",
@@ -23,6 +23,7 @@
     "@types/multer": "^1.4.12",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.11.10",
+    "concurrently": "^9.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   }
