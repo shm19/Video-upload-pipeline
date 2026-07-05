@@ -1,21 +1,19 @@
 import express from "express";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
-import { connect, EXCHANGE } from "./rabbit.js";
 import { pool, initDb } from "./db.js";
+import { EXCHANGE } from "./rabbit.js";
 
 const upload = multer({ dest: "storage/" });
 
 async function main() {
   await initDb();
 
-  const { channel } = await connect();
-  await channel.assertExchange(EXCHANGE, "fanout", { durable: true });
-
   const app = express();
   app.use(express.static("public"));
   app.use("/media", express.static("storage"));
 
+  // The API no longer talks to RabbitMQ at all — the relay publishes the outbox row.
   app.post("/videos", upload.single("video"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "no file" });
 
@@ -34,6 +32,10 @@ async function main() {
            ($1, 'transcode'), ($1, 'thumbnail'), ($1, 'caption')`,
         [videoId],
       );
+      await client.query(
+        "INSERT INTO outbox (exchange, payload) VALUES ($1, $2)",
+        [EXCHANGE, { videoId, originalPath }], // pg serializes the object to jsonb
+      );
       await client.query("COMMIT");
     } catch (e) {
       await client.query("ROLLBACK");
@@ -42,16 +44,10 @@ async function main() {
       client.release();
     }
 
-    await channel.publish(
-      EXCHANGE,
-      "",
-      Buffer.from(JSON.stringify({ videoId, originalPath })),
-    );
-
     res.status(202).json({ videoId, status: "uploaded" });
   });
 
-  // Status feed the UI polls: recent videos + their jobs as nested JSON.
+  // Status feed the UI polls.
   app.get("/videos", async (_req, res) => {
     const { rows } = await pool.query(
       `SELECT v.id, v.status, v.created_at,

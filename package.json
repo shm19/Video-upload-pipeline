@@ -8,7 +8,8 @@
     "worker": "tsx src/transcode-worker.ts",
     "worker:thumbnail": "tsx src/thumbnail-worker.ts",
     "worker:caption": "tsx src/caption-worker.ts",
-    "dev": "concurrently -n api,transcode,thumbnail,caption -c blue,green,magenta,yellow \"npm:api\" \"npm:worker\" \"npm:worker:thumbnail\" \"npm:worker:caption\"",
+    "relay": "tsx src/outbox-relay.ts",
+    "dev": "concurrently -n api,relay,transcode,thumbnail,caption -c blue,cyan,green,magenta,yellow \"npm:api\" \"npm:relay\" \"npm:worker\" \"npm:worker:thumbnail\" \"npm:worker:caption\"",
     "start": "docker compose up -d --wait && npm run dev"
   },
   "dependencies": {

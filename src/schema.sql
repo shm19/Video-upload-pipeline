@@ -20,3 +20,18 @@ CREATE TABLE IF NOT EXISTS jobs (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (video_id, job_type)
 );
+
+-- outbox = messages to publish, written in the SAME txn as the state above.
+-- A relay process publishes unsent rows to RabbitMQ, then stamps published_at.
+-- BIGSERIAL (not UUID) is fine here: these rows are internal, ordered, throwaway.
+CREATE TABLE IF NOT EXISTS outbox (
+  id           BIGSERIAL PRIMARY KEY,
+  exchange     TEXT NOT NULL,
+  routing_key  TEXT NOT NULL DEFAULT '',
+  payload      JSONB NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  published_at TIMESTAMPTZ
+);
+
+-- partial index keeps the relay's "find unpublished" poll cheap even as the table grows.
+CREATE INDEX IF NOT EXISTS outbox_unpublished ON outbox (id) WHERE published_at IS NULL;

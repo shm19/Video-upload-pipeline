@@ -15,13 +15,14 @@ parallel: **transcode** (480p via ffmpeg), **thumbnail** (a frame grab), and **c
 rolled up from its jobs.
 
 ```
-                              ┌─→ [transcode] → 480p mp4
-POST /videos ─┐               │
-              ├─ store file   ├─→ [thumbnail] → frame.jpg
-              ├─ insert rows  │
-              └─ publish ──► video.events (fanout) ─┼─→ [caption]   → whisper → .vtt
-                                                    │
-              failed 3× / poison ───────────────► video.dlx → video.dead
+POST /videos ──(one txn)──► videos + jobs(pending) + outbox
+                                          │
+                                relay publishes ▼
+                        video.events (fanout) ─┬─→ [transcode] → 480p mp4
+                                               ├─→ [thumbnail] → frame.jpg
+                                               └─→ [caption]   → whisper → .vtt
+                                                      │
+                        failed 3× / poison ────► video.dlx → video.dead
 ```
 
 The message carries only a **pointer + metadata** (`{videoId, originalPath}`), never the
@@ -35,8 +36,9 @@ video bytes. State lives in Postgres; the message is just a trigger.
   `output_path`. Per-job state is what lets the three workers run independently without
   fighting over a single status/attempts field.
 
-The API inserts the video row **and** its three `pending` job rows in one transaction, so
-every worker is guaranteed to find its row.
+The API inserts the video row, its three `pending` job rows, **and** an `outbox` message row
+— all in one transaction, so every worker is guaranteed to find its row and no message is lost
+to a dual-write (a relay publishes the outbox row; see Architecture).
 
 ## Architecture notes
 
@@ -55,19 +57,24 @@ every worker is guaranteed to find its row.
 - **Rollup by recompute, not coordination.** After finishing, each worker runs one atomic
   `UPDATE videos SET status = CASE ...` derived from the `jobs` rows — no worker decides
   whether it's "last", which avoids a check-then-write race.
+- **Outbox pattern.** The API writes the message as an `outbox` row in the *same transaction*
+  as the video/jobs (no dual-write), and a **relay** publishes unsent rows to RabbitMQ with
+  publisher confirms, then stamps `published_at`. `FOR UPDATE SKIP LOCKED` lets multiple
+  relays run safely. It's at-least-once publishing — safe because consumers are idempotent.
 
 ## Code layout
 
 | File | Role |
 |---|---|
-| `src/api.ts` | Express: serves the web UI, upload endpoint (file + txn + publish), and `GET /videos` status feed |
+| `src/api.ts` | Express: web UI, upload endpoint (file + video/jobs/outbox in one txn), `GET /videos` feed. No RabbitMQ. |
+| `src/outbox-relay.ts` | Polls the `outbox` table and publishes unsent rows to RabbitMQ (confirm channel + `SKIP LOCKED`) |
 | `public/index.html` | Minimal web UI — upload a video, watch per-job status update live |
 | `src/rabbit.ts` | Connection helper + `assertVideoTopology()` (exchange, DLX, dead queue, work queue) |
 | `src/db.ts` | pg pool, `initDb()`, `recomputeVideoStatus()` |
 | `src/base-worker.ts` | **Template Method** base: validate → guarded claim → delegate work → mark done + rollup → ack, with retry/DLX |
 | `src/transcode-worker.ts` / `thumbnail-worker.ts` / `caption-worker.ts` | Each extends `BaseWorker` and implements only `processMessage()` |
 | `src/utils.ts` | `run(cmd, args)` + `ffmpeg(args)` child-process helpers |
-| `src/schema.sql` | `videos` + `jobs` tables |
+| `src/schema.sql` | `videos` + `jobs` + `outbox` tables |
 | `monitoring/` | Prometheus scrape config + Grafana datasource provisioning |
 
 ## Setup
@@ -96,6 +103,7 @@ Prefer separate terminals (nicer per-worker logs, and how you scale)?
 ```bash
 docker compose up -d --wait
 npm run api                 # UI + API on :3000
+npm run relay               # outbox relay → publishes to RabbitMQ
 npm run worker              # transcode  (run several for competing consumers)
 npm run worker:thumbnail
 npm run worker:caption      # whisper — slow
